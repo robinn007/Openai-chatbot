@@ -4,6 +4,9 @@ import ReactMarkdown from "react-markdown";
 import Head from "next/head";
 import TextareaAutosize from "react-textarea-autosize";
 import Navbar from "@/components/Navbar";
+import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
+import { useRouter } from "next/router";
+import toast from "react-hot-toast";
 
 const SYSTEM_MESSAGE =
   "You are Jobot, a helpful and versatile AI created by Jovian using state-of-the-art ML models and APIs.";
@@ -14,6 +17,9 @@ export default function Home() {
   ]);
   const [userMessage, setUserMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const supabase = useSupabaseClient();
+  const user = useUser();
+  const router = useRouter();
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -23,8 +29,15 @@ export default function Home() {
   };
 
   const sendRequest = async () => {
+    // Check if user is authenticated
+    if (!user) {
+      toast.error("Please log in to send messages");
+      router.push("/login");
+      return;
+    }
+
     if (!userMessage.trim()) {
-      alert("Please enter a message before you hit send");
+      toast.error("Please enter a message before you hit send");
       return;
     }
 
@@ -37,24 +50,23 @@ export default function Home() {
     setIsStreaming(true);
 
     try {
-      // Use Fetch API with streaming
-      const response = await fetch('/api/chat', {
-        method: 'POST',
+      const response = await fetch("/api/chat", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ messages: updatedMessages }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let botMessageContent = "";
-      
-      // Add empty assistant message to start streaming into
+
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "" },
@@ -68,11 +80,11 @@ export default function Home() {
         }
 
         const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
-        
+        const lines = chunk.split("\n\n");
+
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.replace('data: ', '');
+          if (line.startsWith("data: ")) {
+            const dataStr = line.replace("data: ", "");
             try {
               const data = JSON.parse(dataStr);
               if (data.done) {
@@ -92,7 +104,6 @@ export default function Home() {
               }
             } catch (err) {
               console.error("Parse error:", err);
-              // Skip invalid JSON lines
               continue;
             }
           }
@@ -108,12 +119,12 @@ export default function Home() {
         },
       ]);
       setIsStreaming(false);
+      toast.error(err.message);
     }
   };
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    const chatContainer = document.querySelector('.chat-container');
+    const chatContainer = document.querySelector(".chat-container");
     if (chatContainer) {
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -126,12 +137,10 @@ export default function Home() {
       </Head>
 
       <div className="flex flex-col h-screen">
-        {/* Navigation Bar */}
         <nav className="bg-white shadow w-full">
           <Navbar />
         </nav>
 
-        {/* Chat messages */}
         <div className="flex-1 overflow-y-auto chat-container">
           <div className="w-full max-w-screen-md mx-auto px-4 py-6">
             {messages
@@ -150,7 +159,6 @@ export default function Home() {
                   </div>
                   <div className="text-md prose">
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    {/* Show typing indicator for streaming messages */}
                     {isStreaming && idx === messages.length - 1 && msg.role === "assistant" && (
                       <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
                     )}
@@ -160,7 +168,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Input section */}
         <div className="w-full max-w-screen-md mx-auto flex px-4 pb-6 items-start">
           <TextareaAutosize
             value={userMessage}
@@ -171,7 +178,7 @@ export default function Home() {
             onChange={(e) => setUserMessage(e.target.value)}
             className="border text-lg rounded-md p-2 flex-1 resize-none"
             rows={1}
-            disabled={isStreaming} // Disable input while streaming
+            disabled={isStreaming}
           />
           <button
             onClick={sendRequest}
