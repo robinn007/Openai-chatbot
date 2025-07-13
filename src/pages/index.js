@@ -53,9 +53,11 @@ export default function Home() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let botMessageContent = "";
+      
+      // Add empty assistant message to start streaming into
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: botMessageContent },
+        { role: "assistant", content: "" },
       ]);
 
       while (true) {
@@ -67,6 +69,7 @@ export default function Home() {
 
         const chunk = decoder.decode(value);
         const lines = chunk.split('\n\n');
+        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const dataStr = line.replace('data: ', '');
@@ -108,32 +111,13 @@ export default function Home() {
     }
   };
 
-  // Simulate typing effect by controlling the display of the last message
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (isStreaming && messages[messages.length - 1]?.role === "assistant") {
-      const lastMessage = messages[messages.length - 1].content;
-      let currentIndex = 0;
-      const typingSpeed = 10; // Adjust typing speed (ms per character)
-
-      const typingInterval = setInterval(() => {
-        if (currentIndex < lastMessage.length) {
-          currentIndex++;
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = {
-              role: "assistant",
-              content: lastMessage.slice(0, currentIndex),
-            };
-            return newMessages;
-          });
-        } else {
-          clearInterval(typingInterval);
-        }
-      }, typingSpeed);
-
-      return () => clearInterval(typingInterval);
+    const chatContainer = document.querySelector('.chat-container');
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
     }
-  }, [messages, isStreaming]);
+  }, [messages]);
 
   return (
     <>
@@ -148,7 +132,7 @@ export default function Home() {
         </nav>
 
         {/* Chat messages */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto chat-container">
           <div className="w-full max-w-screen-md mx-auto px-4 py-6">
             {messages
               .filter((m) => m.role !== "system")
@@ -166,6 +150,10 @@ export default function Home() {
                   </div>
                   <div className="text-md prose">
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    {/* Show typing indicator for streaming messages */}
+                    {isStreaming && idx === messages.length - 1 && msg.role === "assistant" && (
+                      <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1"></span>
+                    )}
                   </div>
                 </div>
               ))}
