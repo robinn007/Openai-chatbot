@@ -18,23 +18,40 @@ export default async function handler(req, res) {
       baseURL: "https://models.github.ai/inference",
     });
 
-    const response = await client.chat.completions.create({
+    // Create a streaming chat completion
+    const stream = await client.chat.completions.create({
       model: "openai/gpt-4o-mini",
       messages: messages,
       temperature: 1,
       max_tokens: 4096,
       top_p: 1,
+      stream: true, // Enable streaming
     });
 
-    const botMessage = response?.choices?.[0]?.message;
+    // Set headers for streaming response
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    if (botMessage) {
-      res.status(200).json({ message: botMessage });
-    } else {
-      throw new Error("Unexpected response format");
+    // Stream the response to the client
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
     }
+
+    // Send a JSON-compatible [DONE] message
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
   } catch (error) {
     console.error("API Error:", error);
     res.status(500).json({ error: error.message });
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};

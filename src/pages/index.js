@@ -1,5 +1,5 @@
 // pages/index.js
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import Head from "next/head";
 import TextareaAutosize from "react-textarea-autosize";
@@ -13,6 +13,7 @@ export default function Home() {
     { role: "system", content: SYSTEM_MESSAGE },
   ]);
   const [userMessage, setUserMessage] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -33,35 +34,66 @@ export default function Home() {
     ];
     setMessages(updatedMessages);
     setUserMessage("");
+    setIsStreaming(true);
 
     try {
-      // Call your API route instead of directly calling OpenAI
+      // Use Fetch API with streaming
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: updatedMessages,
-        }),
+        body: JSON.stringify({ messages: updatedMessages }),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let botMessageContent = "";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: botMessageContent },
+      ]);
 
-      const botMessage = data.message;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          setIsStreaming(false);
+          break;
+        }
 
-      if (botMessage) {
-        setMessages([...updatedMessages, botMessage]);
-      } else {
-        throw new Error("Unexpected response format");
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.replace('data: ', '');
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.done) {
+                setIsStreaming(false);
+                break;
+              }
+              if (data.content) {
+                botMessageContent += data.content;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = {
+                    role: "assistant",
+                    content: botMessageContent,
+                  };
+                  return newMessages;
+                });
+              }
+            } catch (err) {
+              console.error("Parse error:", err);
+              // Skip invalid JSON lines
+              continue;
+            }
+          }
+        }
       }
     } catch (err) {
       console.error("Error:", err);
@@ -72,8 +104,36 @@ export default function Home() {
           content: "❌ Error: " + err.message,
         },
       ]);
+      setIsStreaming(false);
     }
   };
+
+  // Simulate typing effect by controlling the display of the last message
+  useEffect(() => {
+    if (isStreaming && messages[messages.length - 1]?.role === "assistant") {
+      const lastMessage = messages[messages.length - 1].content;
+      let currentIndex = 0;
+      const typingSpeed = 10; // Adjust typing speed (ms per character)
+
+      const typingInterval = setInterval(() => {
+        if (currentIndex < lastMessage.length) {
+          currentIndex++;
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              role: "assistant",
+              content: lastMessage.slice(0, currentIndex),
+            };
+            return newMessages;
+          });
+        } else {
+          clearInterval(typingInterval);
+        }
+      }, typingSpeed);
+
+      return () => clearInterval(typingInterval);
+    }
+  }, [messages, isStreaming]);
 
   return (
     <>
@@ -123,10 +183,16 @@ export default function Home() {
             onChange={(e) => setUserMessage(e.target.value)}
             className="border text-lg rounded-md p-2 flex-1 resize-none"
             rows={1}
+            disabled={isStreaming} // Disable input while streaming
           />
           <button
             onClick={sendRequest}
-            className="bg-blue-500 hover:bg-blue-600 border rounded-md text-white text-lg w-20 p-2 ml-2"
+            className={`border rounded-md text-white text-lg w-20 p-2 ml-2 ${
+              isStreaming
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-blue-500 hover:bg-blue-600"
+            }`}
+            disabled={isStreaming}
           >
             Send
           </button>
