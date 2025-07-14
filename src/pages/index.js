@@ -9,7 +9,7 @@ import { useRouter } from "next/router";
 import toast from "react-hot-toast";
 
 const SYSTEM_MESSAGE =
-  "You are Jobot, a helpful and versatile AI created by Jovian using state-of-the-art ML models and APIs.";
+  "You are Chatbot, a helpful and versatile AI created by Robin using state-of-the-art ML models and APIs.";
 
 export default function Home() {
   const [messages, setMessages] = useState([
@@ -115,7 +115,7 @@ export default function Home() {
         ...updatedMessages,
         {
           role: "assistant",
-          content: "❌ Error: " + err.message,
+          content: "Error: " + err.message,
         },
       ]);
       setIsStreaming(false);
@@ -133,7 +133,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Jobot - Your friendly neighborhood AI</title>
+        <title>Chatbot - Your friendly neighborhood AI</title>
       </Head>
 
       <div className="flex flex-col h-screen">
