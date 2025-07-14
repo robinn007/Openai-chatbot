@@ -155,7 +155,7 @@ export default function Home() {
                   }`}
                 >
                   <div className="font-semibold mb-1">
-                    {msg.role === "user" ? "You" : "Jobot"}
+                    {msg.role === "user" ? "You" : "Chatbot"}
                   </div>
                   <div className="text-md prose">
                     <ReactMarkdown>{msg.content}</ReactMarkdown>
